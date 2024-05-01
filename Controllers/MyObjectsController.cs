@@ -25,7 +25,7 @@ namespace FinstarTest.Controllers
             {
                 return BadRequest();
             }
-            var a = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
+
             using (SqlConnection sqlConnection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
             {
                 sqlConnection.Open();
