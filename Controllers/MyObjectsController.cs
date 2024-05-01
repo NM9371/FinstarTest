@@ -1,6 +1,7 @@
 using FinstarTest.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
 
 namespace FinstarTest.Controllers
 {
@@ -8,12 +9,13 @@ namespace FinstarTest.Controllers
     [Route("[controller]")]
     public class MyObjectsController : ControllerBase
     {
-
         private readonly ILogger<MyObjectsController> _logger;
+        private readonly IConfiguration _configuration;
 
-        public MyObjectsController(ILogger<MyObjectsController> logger)
+        public MyObjectsController(ILogger<MyObjectsController> logger, IConfiguration configuration)
         {
             _logger = logger;
+            _configuration = configuration;
         }
 
         [HttpPost("add")]
@@ -23,9 +25,8 @@ namespace FinstarTest.Controllers
             {
                 return BadRequest();
             }
-
-            var sqlManager = new SqlConnectionManager();
-            using (SqlConnection sqlConnection = sqlManager.OpenSqlConnection())
+            var a = new SqlConnection(_configuration.GetConnectionString("DefaultConnection"));
+            using (SqlConnection sqlConnection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
             {
                 sqlConnection.Open();
                 string query = @"
@@ -62,8 +63,8 @@ namespace FinstarTest.Controllers
         {
             Console.WriteLine("hello");
             List<MyObject> myObjects = new List<MyObject>();
-            var sqlManager = new SqlConnectionManager();
-            using (SqlConnection sqlConnection = sqlManager.OpenSqlConnection())
+
+            using (SqlConnection sqlConnection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
             {
                 sqlConnection.Open();
                 string query = "SELECT Id, Code, Value FROM Objects ORDER by Id";
