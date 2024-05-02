@@ -13,16 +13,12 @@ LEFT JOIN ClientContacts cc ON cc.ClientId = c.Id
 GROUP BY c.ClientName
 HAVING COUNT(cc.Id)>2
 --3.1
-WITH Intervals AS (
+SELECT * FROM
+(
     SELECT 
         Id,
-        Dt AS StartDate,
-        LEAD(Dt) OVER (PARTITION BY Id ORDER BY Dt) AS EndDate
+        Dt AS Sd,
+        LEAD(Dt) OVER (PARTITION BY Id ORDER BY Dt) AS Ed
     FROM Dates
-)
-SELECT 
-    Id,
-    StartDate AS Sd,
-    EndDate AS Ed
-FROM Intervals
-WHERE EndDate IS NOT NULL;
+) as Intervals 
+WHERE Ed IS NOT NULL
