@@ -1,7 +1,7 @@
 using FinstarTest.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
 
 namespace FinstarTest.Controllers
 {
@@ -19,13 +19,47 @@ namespace FinstarTest.Controllers
         }
 
         [HttpPost("add")]
-        public async Task<ActionResult> AddMyObjects(List<Dictionary<string, string>> myObjects)
+        public async Task<ActionResult> AddMyObjects(List<Dictionary<string, string>> data)
         {
-            if (myObjects == null)
+            if (data == null)
             {
                 return BadRequest();
             }
 
+            List<MyObject> myObjects = ParseToMyObjectsList(data);
+            await CreateOrClearTable();
+
+            myObjects.ForEach(async myObject =>
+            {
+                await AddObjectToDB(myObject);
+
+            });
+
+            return Ok();
+        }
+
+        //Из-за требуемого формата для JSON данные принимаются как массив словарей с одной парой,
+        //поэтому приходится парсить его в список экземпляров класса для дальнейшей нормальной работы
+        private List<MyObject> ParseToMyObjectsList(List<Dictionary<string, string>> data)
+        {
+            List<MyObject> myObjects = new List<MyObject>();
+            int id = 0;
+            data = data.OrderBy(x => int.Parse(x.First().Key)).ToList();
+            data.ForEach(x =>
+                {
+                    myObjects.Add(new MyObject
+                    {
+                        Id = ++id,
+                        Code = int.Parse(x.First().Key),
+                        Value = x.First().Value
+                    });
+                }
+            );
+            return myObjects;
+        }
+
+        private async Task CreateOrClearTable()
+        {
             using (SqlConnection sqlConnection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
             {
                 sqlConnection.Open();
@@ -37,39 +71,54 @@ namespace FinstarTest.Controllers
 		                    [Code] [int] NULL,
 		                    [Value] [nvarchar](max) NULL
 	                    ) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
-                    END;
+                    END
+                    ELSE
+                    BEGIN
+                        DELETE FROM Objects
+                    END
                     ";
                 var command = new SqlCommand(query, sqlConnection);
                 await command.ExecuteNonQueryAsync();
-
-                query = "DELETE FROM Objects";
-                command = new SqlCommand(query, sqlConnection);
-                await command.ExecuteNonQueryAsync();
-
-                int id = 0;
-                foreach (Dictionary<string, string> myObject in myObjects)
-                {
-                    query = $"INSERT INTO Objects(Id, Code, Value) VALUES({++id}, {myObject.First().Key}, '{myObject.First().Value}')";
-                    command = new SqlCommand(query, sqlConnection);
-                    await command.ExecuteNonQueryAsync();
-                };
-
             }
-            return Ok();
+        }
+        private async Task AddObjectToDB(MyObject myObject)
+        {
+            using (SqlConnection sqlConnection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
+            {
+                sqlConnection.Open();
+                var query = $"INSERT INTO Objects(Id, Code, Value) VALUES({myObject.Id}, {myObject.Code}, '{myObject.Value}')";
+                var command = new SqlCommand(query, sqlConnection);
+                await command.ExecuteNonQueryAsync();
+            }
         }
 
+
         [HttpGet("")]
-        public async Task<ActionResult> GetMyObjects()
+        public ActionResult GetMyObjects([FromQuery] int? id, [FromQuery] int? code, [FromQuery] string? value)
         {
-            Console.WriteLine("hello");
+            List<MyObject> myObjects = GetObjectsFromDB(id, code, value);
+            return Ok(myObjects);
+        }
+
+        private List<MyObject> GetObjectsFromDB(int? id, int? code, string? value)
+        {
             List<MyObject> myObjects = new List<MyObject>();
 
             using (SqlConnection sqlConnection = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
             {
                 sqlConnection.Open();
-                string query = "SELECT Id, Code, Value FROM Objects ORDER by Id";
+                string query = @"SELECT Id, Code, Value 
+                    FROM Objects 
+                    WHERE 1=1";
+                query += id != null ? $" AND Id = @Id" : "";
+                query += code != null ? $" AND Code = @Code" : "";
+                query += !value.IsNullOrEmpty() ? $" AND Value = @Value" : "";
+                query += " ORDER by Id";
                 using (SqlCommand command = new SqlCommand(query, sqlConnection))
                 {
+                    command.Parameters.AddWithValue("@Id", id ?? (object)DBNull.Value);
+                    command.Parameters.AddWithValue("@Code", code ?? (object)DBNull.Value);
+                    command.Parameters.AddWithValue("@Value", value.IsNullOrEmpty() ? (object)DBNull.Value : value);
                     using (SqlDataReader reader = command.ExecuteReader())
                     {
                         while (reader.Read())
@@ -85,8 +134,7 @@ namespace FinstarTest.Controllers
                 }
 
             }
-
-            return Ok(myObjects);
+            return myObjects;
         }
-   }
+    }
 }
